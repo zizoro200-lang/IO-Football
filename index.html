@@ -354,16 +354,14 @@ function findMatchingAnswerId(input, answersData, alreadyUsedIds){
 /* ============================================================
    إعدادات اللعبة
 ============================================================ */
-const TOTAL_ROUNDS = 6;
-const LIST_ROUNDS_COUNT = 4;
-const TRANSFER_ROUNDS_COUNT = 2;
+const LIST_ROUNDS_OPTIONS = [2, 3, 4, 5, 6];
+const TRANSFER_ROUNDS_OPTIONS = [0, 1, 2, 3, 4];
 const DURATION_OPTIONS = [30, 45, 60, 90];
 
-function genRoundTypes(){
-  // 4 اذكر + 2 انتقالات، بترتيب عشوائي
+function genRoundTypes(listCount, transferCount){
   const types = [
-    ...Array(LIST_ROUNDS_COUNT).fill('list'),
-    ...Array(TRANSFER_ROUNDS_COUNT).fill('transfer')
+    ...Array(listCount).fill('list'),
+    ...Array(transferCount).fill('transfer')
   ];
   for(let i=types.length-1;i>0;i--){
     const j = Math.floor(Math.random()*(i+1));
@@ -392,6 +390,8 @@ if(!myDevicePlayerId){
 }
 let myName = localStorage.getItem('fd_player_name') || "";
 let selectedDuration = 60;
+let selectedListCount = 4;
+let selectedTransferCount = 2;
 
 let currentRoom = null;         // row from rooms table
 let myRoomPlayer = null;        // row from room_players (me)
@@ -511,6 +511,19 @@ function renderHome(){
             ${DURATION_OPTIONS.map(d=>`<div class="option-chip ${d===selectedDuration?'selected':''}" data-dur="${d}">${d} ث</div>`).join('')}
           </div>
         </div>
+        <div>
+          <label>عدد أسئلة "اذكر"</label>
+          <div class="option-grid" id="listCountGrid">
+            ${LIST_ROUNDS_OPTIONS.map(n=>`<div class="option-chip ${n===selectedListCount?'selected':''}" data-n="${n}">${n}</div>`).join('')}
+          </div>
+        </div>
+        <div>
+          <label>عدد أسئلة "الانتقالات"</label>
+          <div class="option-grid" id="transferCountGrid">
+            ${TRANSFER_ROUNDS_OPTIONS.map(n=>`<div class="option-chip ${n===selectedTransferCount?'selected':''}" data-n="${n}">${n}</div>`).join('')}
+          </div>
+        </div>
+        <p class="small-note" id="totalRoundsNote" style="margin:0;">إجمالي الجولات: ${selectedListCount+selectedTransferCount}</p>
         <button class="btn btn-primary" id="createBtn">🏟️ إنشاء غرفة جديدة</button>
         <div style="display:flex; align-items:center; gap:10px; color:var(--chalk-dim); font-size:13px; font-weight:700;">
           <div style="flex:1; height:1px; background:var(--line);"></div>
@@ -533,6 +546,24 @@ function renderHome(){
       selectedDuration = parseInt(chip.dataset.dur);
       document.querySelectorAll('#durationGrid .option-chip').forEach(c=>c.classList.remove('selected'));
       chip.classList.add('selected');
+    });
+  });
+  document.querySelectorAll('#listCountGrid .option-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      selectedListCount = parseInt(chip.dataset.n);
+      document.querySelectorAll('#listCountGrid .option-chip').forEach(c=>c.classList.remove('selected'));
+      chip.classList.add('selected');
+      const note = document.getElementById('totalRoundsNote');
+      if(note) note.textContent = `إجمالي الجولات: ${selectedListCount+selectedTransferCount}`;
+    });
+  });
+  document.querySelectorAll('#transferCountGrid .option-chip').forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      selectedTransferCount = parseInt(chip.dataset.n);
+      document.querySelectorAll('#transferCountGrid .option-chip').forEach(c=>c.classList.remove('selected'));
+      chip.classList.add('selected');
+      const note = document.getElementById('totalRoundsNote');
+      if(note) note.textContent = `إجمالي الجولات: ${selectedListCount+selectedTransferCount}`;
     });
   });
   document.getElementById('createBtn').addEventListener('click', handleCreateRoom);
@@ -559,7 +590,9 @@ async function handleCreateRoom(){
       code,
       status: 'waiting',
       round_duration_seconds: selectedDuration,
-      total_rounds: TOTAL_ROUNDS,
+      total_rounds: selectedListCount + selectedTransferCount,
+      list_rounds_count: selectedListCount,
+      transfer_rounds_count: selectedTransferCount,
       current_round: 0
     }).select().single();
 
@@ -642,10 +675,10 @@ async function handleJoinRoom(){
 }
 
 async function startGameForRoom(room, players){
-  // حدد نوع كل جولة (4 اذكر + 2 انتقالات بترتيب عشوائي)، واختار الأسئلة لكل نوع مقدمًا
-  const roundTypes = genRoundTypes();
-  const listCount = roundTypes.filter(t=>t==='list').length;
-  const transferCount = roundTypes.filter(t=>t==='transfer').length;
+  // حدد نوع كل جولة حسب اختيار منشئ الغرفة (مخزنة في الغرفة نفسها)، واختار الأسئلة لكل نوع مقدمًا
+  const listCount = room.list_rounds_count ?? 4;
+  const transferCount = room.transfer_rounds_count ?? 2;
+  const roundTypes = genRoundTypes(listCount, transferCount);
 
   const pickedList = await loadRandomQuestions(listCount);
   const pickedTransfer = await loadRandomTransferQuestions(transferCount);
